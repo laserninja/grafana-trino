@@ -75,6 +75,20 @@ export class ConfigEditor extends PureComponent<Props, State> {
                 />
             </InlineField>
           </div>
+          <div className="gf-form-inline">
+            <InlineField
+              label="Client Tags"
+              tooltip="Comma-separated list of tag strings for identifying Trino resource groups"
+              labelWidth={26}
+            >
+              <Input
+                value={options.jsonData?.clientTags ?? ''}
+                onChange={onClientTagsChange}
+                width={60}
+                placeholder="tag1,tag2,tag3"
+              />
+            </InlineField>
+          </div>
         </div>
 
         <h3 className="page-heading">OAuth Trino Authentication</h3>
@@ -129,19 +143,6 @@ export class ConfigEditor extends PureComponent<Props, State> {
               <Input
                 value={options.jsonData?.impersonationUser ?? ''}
                 onChange={onImpersonationUserChange}
-                width={60}
-              />
-            </InlineField>
-          </div>
-          <div className="gf-form-inline">
-            <InlineField
-              label="Client tags"
-              tooltip="Comma-separated list of tag strings used to identify Trino resource groups"
-              labelWidth={26}
-            >
-              <Input
-                value={options.jsonData?.clientTags ?? ''}
-                onChange={onClientTagsChange}
                 width={60}
               />
             </InlineField>
