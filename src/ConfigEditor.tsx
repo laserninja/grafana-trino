@@ -78,7 +78,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
           <div className="gf-form-inline">
             <InlineField
               label="Client Tags"
-              tooltip="Comma-separated list of tag strings for identifying Trino resource groups"
+              tooltip="A comma-separated list of “tag” strings, used to identify Trino resource groups."
               labelWidth={26}
             >
               <Input
