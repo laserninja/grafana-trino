@@ -131,6 +131,8 @@ jobs:
           done
 
       - name: End to end test
+        env:
+          GRAFANA_VERSION: ${{ matrix.grafana }}
         run: |
           npx tsc -p tsconfig.json --noEmit
           npx playwright install
