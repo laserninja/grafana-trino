@@ -51,8 +51,8 @@ async function runQueryAndCheckResults(page: Page) {
     await byLabelOrTestId(page, 'Time Range from field').fill('1995-01-01');
     await byLabelOrTestId(page, 'Time Range to field').fill('1995-12-31');
     await page.getByTestId('data-testid TimePicker submit button').click();
-    // Format dropdown: aria-label in 9.x, div structure in 11.x
-    await page.getByLabel('Format as').or(page.locator('div').filter({hasText: /^Format as/}).locator('svg')).click();
+    // Format dropdown: use combobox role (works in both 9.x and 11.x)
+    await page.getByRole('combobox', { name: 'Format as' }).click();
     await page.getByText('Table', { exact: true }).or(page.getByRole('option', {name: 'Table'})).click();
     await page.getByTestId('data-testid RefreshPicker run button').click();
     await expect(page.getByTestId('data-testid table body')).toContainText(/.*1995-01-19 0.:00:00.*/);
@@ -76,19 +76,9 @@ test('test client credentials flow with wrong credentials', async ({ page }) => 
     await login(page);
     await goToTrinoSettings(page);
     await setupDataSourceWithClientCredentials(page, "some-wrong-client");
-    // Check for error alert instead of checking absence of Explore button
-    // The data source might still be saved even with wrong credentials
-    // So we check if there's an error message or the Explore button is disabled/not present
-    const exploreButton = page.getByText('Explore', {exact: true}).or(page.getByLabel('Explore data'));
-    const errorAlert = page.locator('[role="alert"]:has-text("error"), [role="alert"]:has-text("failed"), [role="alert"]:has-text("Error")');
-    
-    // Either there should be an error alert, or the Explore button should not be visible
-    const hasError = await errorAlert.count() > 0;
-    
-    // If there's no error alert, then Explore button should not be present
-    if (!hasError) {
-        await expect(exploreButton).toHaveCount(0);
-    }
+    // After Save & Test with wrong credentials, an error alert should appear
+    const errorAlert = page.locator('[role="alert"]').filter({ hasText: /error|failed|Error/i });
+    await expect(errorAlert.first()).toBeVisible({ timeout: 10000 });
 });
 
 test('test client credentials flow with configured access token', async ({ page }) => {
@@ -96,16 +86,7 @@ test('test client credentials flow with configured access token', async ({ page 
     await goToTrinoSettings(page);
     await page.locator('div').filter({hasText: /^Access token$/}).locator('input[type="password"]').fill('aaa');
     await setupDataSourceWithClientCredentials(page, GRAFANA_CLIENT);
-    // Check for error alert instead of checking absence of Explore button
-    // Setting both access token and client credentials should be invalid
-    const exploreButton = page.getByText('Explore', {exact: true}).or(page.getByLabel('Explore data'));
-    const errorAlert = page.locator('[role="alert"]:has-text("error"), [role="alert"]:has-text("failed"), [role="alert"]:has-text("Error")');
-    
-    // Either there should be an error alert, or the Explore button should not be visible
-    const hasError = await errorAlert.count() > 0;
-    
-    // If there's no error alert, then Explore button should not be present
-    if (!hasError) {
-        await expect(exploreButton).toHaveCount(0);
-    }
+    // After Save & Test with both access token and client credentials, an error alert should appear
+    const errorAlert = page.locator('[role="alert"]').filter({ hasText: /error|failed|Error/i });
+    await expect(errorAlert.first()).toBeVisible({ timeout: 10000 });
 });
