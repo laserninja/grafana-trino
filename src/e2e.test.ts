@@ -18,7 +18,6 @@ async function login(page: Page) {
     await sel(page, 'Password input field').fill('admin');
     await sel(page, 'Login button').click();
     await sel(page, 'Skip change password button').click();
-    await page.waitForLoadState('networkidle');
 }
 
 async function goToTrinoSettings(page: Page) {
@@ -32,6 +31,15 @@ async function goToTrinoSettings(page: Page) {
     }
 }
 
+// Wait for Save & Test response: "Data source is working" or any error text
+async function waitForSaveTestResult(page: Page): Promise<boolean> {
+    const success = page.getByText('Data source is working');
+    const error = page.getByText('Data source is not working');
+    // Wait for either success or failure message
+    await success.or(error).waitFor({ timeout: 30000 });
+    return await success.isVisible();
+}
+
 async function setupDataSourceWithAccessToken(page: Page) {
     await sel(page, 'Datasource HTTP settings url').fill('http://trino:8080');
     if (isNewGrafana) {
@@ -41,7 +49,6 @@ async function setupDataSourceWithAccessToken(page: Page) {
     }
     await page.locator('div').filter({hasText: /^Access token$/}).locator('input[type="password"]').fill('aaa');
     await sel(page, 'Data source settings page Save and Test button').click();
-    await page.waitForSelector('[role="alert"]', { timeout: 10000 });
 }
 
 async function setupDataSourceWithClientCredentials(page: Page, clientId: string) {
@@ -51,7 +58,6 @@ async function setupDataSourceWithClientCredentials(page: Page, clientId: string
     await page.locator('div').filter({hasText: /^Client secret$/}).locator('input[type="password"]').fill('grafana-secret');
     await page.locator('div').filter({hasText: /^Impersonation user$/}).locator('input').fill('service-account-grafana-client');
     await sel(page, 'Data source settings page Save and Test button').click();
-    await page.waitForSelector('[role="alert"]', { timeout: 10000 });
 }
 
 async function runQueryAndCheckResults(page: Page) {
@@ -80,6 +86,8 @@ test('test with access token', async ({ page }) => {
     await login(page);
     await goToTrinoSettings(page);
     await setupDataSourceWithAccessToken(page);
+    const ok = await waitForSaveTestResult(page);
+    expect(ok).toBe(true);
     await runQueryAndCheckResults(page);
 });
 
@@ -87,6 +95,8 @@ test('test client credentials flow', async ({ page }) => {
     await login(page);
     await goToTrinoSettings(page);
     await setupDataSourceWithClientCredentials(page, GRAFANA_CLIENT);
+    const ok = await waitForSaveTestResult(page);
+    expect(ok).toBe(true);
     await runQueryAndCheckResults(page);
 });
 
@@ -94,10 +104,8 @@ test('test client credentials flow with wrong credentials', async ({ page }) => 
     await login(page);
     await goToTrinoSettings(page);
     await setupDataSourceWithClientCredentials(page, "some-wrong-client");
-    // Alert is already visible (setupDataSourceWithClientCredentials waits for it).
-    // Verify it is NOT the success message.
-    await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[role="alert"]').filter({ hasText: 'Data source is working' })).toHaveCount(0);
+    const ok = await waitForSaveTestResult(page);
+    expect(ok).toBe(false);
 });
 
 test('test client credentials flow with configured access token', async ({ page }) => {
@@ -105,8 +113,6 @@ test('test client credentials flow with configured access token', async ({ page 
     await goToTrinoSettings(page);
     await page.locator('div').filter({hasText: /^Access token$/}).locator('input[type="password"]').fill('aaa');
     await setupDataSourceWithClientCredentials(page, GRAFANA_CLIENT);
-    // Alert is already visible (setupDataSourceWithClientCredentials waits for it).
-    // Verify it is NOT the success message.
-    await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[role="alert"]').filter({ hasText: 'Data source is working' })).toHaveCount(0);
+    const ok = await waitForSaveTestResult(page);
+    expect(ok).toBe(false);
 });
