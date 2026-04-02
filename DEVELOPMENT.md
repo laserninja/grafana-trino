@@ -1,56 +1,91 @@
 # Development
 
-## Build and test
+## Prerequisites
 
-1. Install dependencies
+- [Node.js](https://nodejs.org/) >= 22
+- [Go](https://golang.org/) >= 1.24
+- [Mage](https://magefile.org/)
+- [Docker](https://www.docker.com/) and Docker Compose
 
-   ```bash
-   yarn install
-   ```
-
-2. Build plugin in development mode or run in watch mode
-
-   ```bash
-   yarn dev
-   ```
-
-   or
-
-   ```bash
-   yarn watch
-   ```
-
-3. Build plugin in production mode
-
-   ```bash
-   yarn build
-   ```
-
-4. Build backend plugin binaries for Linux, Windows and Darwin:
-
-   ```bash
-   mage -v
-   ```
-
-5. Sign the plugin for private deployments
-
-   ```bash
-   yarn sign --rootUrls http://localhost:3000
-   ```
-
-## Verifier
+## Quick Start
 
 ```bash
-name=$(jq -r '.id' src/plugin.json)
-cp -a dist "$name"
-zip -r "$name.zip" "$name"
-docker run -it --rm -v $(pwd):/plugin grafana/plugin-validator-cli /app/bin/plugincheck2 -config config/default.yaml /plugin/$name.zip
+# Install frontend dependencies
+npm install
+
+# Build frontend in watch mode
+npm run dev
+
+# Build backend (all platforms)
+mage -v buildAll
+
+# Start Grafana + Trino with Docker Compose
+npm run server
 ```
 
-## Releases
+Open [http://localhost:3000](http://localhost:3000) (default credentials: admin/admin). The Trino datasource is auto-provisioned.
 
-1. Update the [CHANGELOG.md](CHANGELOG.md)
-1. Update the version in the [package.json](package.json)
-1. Commit the changes and create a `vX.Y` tag matching contents of the `package.json` file.
+## Project Structure
 
-The release workflow will be triggered when pushing the tag and will create the GitHub release with the artifacts and release notes.
+```
+pkg/
+  main.go                  # Backend plugin entry point
+  trino/
+    datasource.go          # sqlds.Driver implementation (Connect, Converters, Macros)
+    datasource_test.go     # Go unit tests
+src/
+  module.ts                # Frontend plugin entry point
+  datasource.ts            # DataSourceWithBackend implementation
+  types.ts                 # TypeScript types (TrinoQuery, TrinoDataSourceOptions)
+  components/
+    ConfigEditor.tsx       # Datasource configuration UI
+    QueryEditor.tsx        # SQL query editor with format selector
+tests/
+  configEditor.spec.ts     # E2E tests for configuration
+  queryEditor.spec.ts      # E2E tests for query editor
+provisioning/
+  datasources/
+    datasources.yml        # Auto-provisioned Trino datasource for dev
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm install` | Install frontend dependencies |
+| `npm run dev` | Build frontend in watch mode |
+| `npm run build` | Production frontend build |
+| `npm run test:ci` | Run Jest unit tests |
+| `npm run lint` | Run ESLint |
+| `npm run typecheck` | Run TypeScript type checking |
+| `npm run e2e` | Run Playwright E2E tests |
+| `npm run server` | Start Docker Compose (Grafana + Trino) |
+| `mage -v buildAll` | Build backend for all platforms |
+| `go test ./pkg/...` | Run Go unit tests |
+
+## Running E2E Tests
+
+E2E tests require Grafana and Trino running via Docker Compose:
+
+```bash
+# Start the environment
+npm run server
+
+# In another terminal, run E2E tests
+npm run e2e
+```
+
+To test against a specific Grafana version:
+
+```bash
+GRAFANA_VERSION=10.0.0 npm run server
+```
+
+## Backend Development
+
+The backend uses [sqlds](https://github.com/grafana/sqlds) — Grafana's shared SQL datasource framework. The plugin implements the `sqlds.Driver` interface:
+
+- `Connect()` — Opens a connection to Trino
+- `Converters()` — Maps Trino SQL types to Grafana data types
+- `Macros()` — Provides Trino-specific query macros
+- `Settings()` — Returns driver configuration (fill mode, timeouts)

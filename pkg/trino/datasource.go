@@ -5,112 +5,67 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"regexp"
+	"net/url"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/data/sqlutil"
-	"github.com/grafana/sqlds/v2"
-	"github.com/pkg/errors"
-	"github.com/trinodb/grafana-trino/pkg/trino/driver"
-	"github.com/trinodb/grafana-trino/pkg/trino/models"
+	"github.com/grafana/sqlds/v4"
+	_ "github.com/trinodb/trino-go-client/trino"
 )
 
-type TrinoDatasource struct {
-	db *sql.DB
-}
+// Datasource implements the sqlds.Driver interface for Trino.
+type Datasource struct{}
 
-var (
-	_ sqlds.Driver         = (*TrinoDatasource)(nil)
-	_ sqlds.QueryArgSetter = (*TrinoDatasource)(nil)
-	_ sqlds.Completable    = (*TrinoDatasource)(nil)
-)
-
-func New() *TrinoDatasource {
-	return &TrinoDatasource{}
-}
-
-func (s *TrinoDatasource) FillMode() *data.FillMissing {
-	return &data.FillMissing{
-		Mode: data.FillModeNull,
+// Settings returns the driver settings for Trino.
+func (d *Datasource) Settings(_ context.Context, _ backend.DataSourceInstanceSettings) sqlds.DriverSettings {
+	return sqlds.DriverSettings{
+		FillMode: &fillModeNull,
 	}
 }
 
-func (s *TrinoDatasource) Settings(config backend.DataSourceInstanceSettings) sqlds.DriverSettings {
-	return sqlds.DriverSettings{}
-}
+var fillModeNull = data.FillMissing{Mode: data.FillModeNull}
 
-// Connect opens a sql.DB connection using datasource settings
-func (s *TrinoDatasource) Connect(config backend.DataSourceInstanceSettings, queryArgs json.RawMessage) (*sql.DB, error) {
-	settings := models.TrinoDatasourceSettings{}
-	err := settings.Load(config)
+// Connect opens a SQL connection to Trino using the datasource settings.
+func (d *Datasource) Connect(_ context.Context, settings backend.DataSourceInstanceSettings, _ json.RawMessage) (*sql.DB, error) {
+	dsn, err := buildDSN(settings)
 	if err != nil {
-		return nil, fmt.Errorf("error reading settings: %s", err.Error())
+		return nil, fmt.Errorf("failed to build Trino DSN: %w", err)
 	}
 
-	db, err := driver.Open(settings)
+	db, err := sql.Open("trino", dsn)
 	if err != nil {
-		return nil, errors.WithMessage(err, "Failed to connect to database. Is the hostname and port correct?")
+		return nil, fmt.Errorf("failed to open Trino connection: %w", err)
 	}
-	s.db = db
 
 	return db, nil
 }
 
-func (s *TrinoDatasource) Converters() (sc []sqlutil.Converter) {
-	nullStringConverter := sqlutil.NullStringConverter
-	nullStringConverter.InputTypeRegex = regexp.MustCompile("char|varchar|varbinary|json|interval year to month|interval day to second|decimal|ipaddress|unknown")
-	nullDecimalConverter := sqlutil.NullDecimalConverter
-	nullDecimalConverter.InputTypeRegex = regexp.MustCompile("real|double")
-	nullInt64Converter := sqlutil.NullInt64Converter
-	nullInt64Converter.InputTypeRegex = regexp.MustCompile("tinyint|smallint|integer|bigint")
-	nullTimeConverter := sqlutil.NullTimeConverter
-	nullTimeConverter.InputTypeRegex = regexp.MustCompile("date|time|time with time zone|timestamp|timestamp with time zone")
-	nullBoolConverter := sqlutil.NullBoolConverter
-	nullBoolConverter.InputTypeName = "boolean"
-	return []sqlutil.Converter{
-		nullStringConverter,
-		nullDecimalConverter,
-		nullInt64Converter,
-		nullTimeConverter,
-		nullBoolConverter,
-	}
+// Converters returns the type converters for Trino SQL types.
+func (d *Datasource) Converters() []sqlutil.Converter {
+	return []sqlutil.Converter{}
 }
 
-func (s *TrinoDatasource) SetQueryArgs(ctx context.Context, headers http.Header) []interface{} {
-	var args []interface{}
-
-	user := ctx.Value(trinoUserHeader)
-	accessToken := ctx.Value(accessTokenKey)
-	clientTags := ctx.Value(trinoClientTagsKey)
-
-	if user != nil {
-		args = append(args, sql.Named(trinoUserHeader, string(user.(*backend.User).Login)))
-	}
-
-	if accessToken != nil {
-		args = append(args, sql.Named(accessTokenKey, accessToken.(string)))
-	}
-
-	if clientTags != nil {
-		args = append(args, sql.Named(trinoClientTagsKey, clientTags.(string)))
-	}
-
-	return args
+// Macros returns the macro functions for Trino queries.
+func (d *Datasource) Macros() sqlds.Macros {
+	return sqlds.Macros{}
 }
 
-func (s *TrinoDatasource) Schemas(ctx context.Context, options sqlds.Options) ([]string, error) {
-	// TBD
-	return []string{}, nil
-}
+// buildDSN constructs a Trino DSN string from Grafana datasource settings.
+func buildDSN(settings backend.DataSourceInstanceSettings) (string, error) {
+	u, err := url.Parse(settings.URL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL %q: %w", settings.URL, err)
+	}
 
-func (s *TrinoDatasource) Tables(ctx context.Context, options sqlds.Options) ([]string, error) {
-	// TBD
-	return []string{}, nil
-}
+	// Default to "grafana" user if no basic auth user is set
+	user := "grafana"
+	if settings.BasicAuthEnabled && settings.BasicAuthUser != "" {
+		user = settings.BasicAuthUser
+	}
 
-func (s *TrinoDatasource) Columns(ctx context.Context, options sqlds.Options) ([]string, error) {
-	// TBD
-	return []string{}, nil
+	// Build the Trino DSN: http[s]://user@host:port
+	dsn := fmt.Sprintf("%s://%s@%s", u.Scheme, url.PathEscape(user), u.Host)
+
+	return dsn, nil
 }

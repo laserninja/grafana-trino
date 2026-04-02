@@ -1,93 +1,67 @@
-# Trino Grafana Data Source Plugin
+# Grafana Trino Datasource Plugin
 
-[![Build](https://github.com/trinodb/grafana-trino/workflows/CI/badge.svg)](https://github.com/grafana/grafana-datasource-backend/actions?query=workflow%3A%22CI%22)
-
-The Trino datasource allows to query and visualize [Trino](https://trino.io/) data from within Grafana.
-
-## Getting started
-
-Drop this into Grafana's `plugins` directory. To run it locally without installing Grafana, run it in a Docker container using:
-
-```bash
-docker run -d -p 3000:3000 \
-  -v "$(pwd):/var/lib/grafana/plugins/trino" \
-  -e "GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=trino-datasource" \
-  --name=grafana \
-  grafana/grafana-oss
-```
-
+A [Grafana](https://grafana.com/) datasource plugin for [Trino](https://trino.io/) — a distributed SQL query engine designed for fast analytic queries against data of any size.
 
 ## Features
 
-* Authentication:
-  * HTTP Basic
-  * TLS client authentication
-  * Access token (JWT)
-  * OAuth
-* Raw SQL editor only, no query builder yet
-* Macros
-* Client tags support, used to identify resource groups.
+- Connect Grafana to any Trino cluster
+- Write raw SQL queries with full Trino dialect support
+- Output formats: Table, Time Series, Logs
+- Grafana alerting support
+- Annotations support
+- Template variable support with proper escaping
 
-## Macros support
+## Requirements
 
-Plugin supports the following marcos:
+- Grafana ≥ 10.0.0
+- Trino cluster accessible from the Grafana server
 
-* `$timeFrom($column)` - replaced with the lower boundary of the currently selected "Time Range" as a timestamp.
-* `$timeTo($column)` - replaced with the upper boundary of the currently selected "Time Range" as a timestamp.
-* `$timeGroup($column, $interval)` - replaced with an expression that rounds values of a column
-  to the selected "Group by a time interval" value.
-* `$dateFilter($column)` - replaced with a range condition for the currently selected "Time Range" as dates,
-  on a column passed as the $column argument. Use it in queries or query variables
-  as `...WHERE $dateFilter($column)...` or `...WHERE $dateFilter(created_at)....`.
-* `$timeFilter($column)` - replaced with a range condition for the currently selected "Time Range" as timestamps,
-  on a column passed as the $column argument.
-* `$unixEpochFilter($column)` - replaced with a range condition for the currently selected "Time Range",
-  on a column passed as the $column argument.
-* `$parseTime` - parse a timestamp string using the default or specified format.
+## Installation
 
-A description of macros is available by typing their names in Raw Editor
+### From Grafana Plugin Catalog
 
-## Templating
+Search for **Trino** in Grafana → Administration → Plugins, then click **Install**.
 
-### Using Variables in Queries
+### Manual
 
-Template variable values are only quoted when the template variable is a `multi-value`.
+Download the latest release from the [GitHub releases page](https://github.com/laserninja/grafana-trino/releases), extract into your Grafana plugins directory, and restart Grafana.
 
-If the variable is a multi-value variable then use the `IN` comparison operator
-rather than `=` to match against multiple values.
+## Configuration
 
-Example with a template variable named hostname:
+1. Go to **Connections → Data sources → Add data source**
+2. Search for **Trino**
+3. Set the **URL** to your Trino coordinator (e.g., `http://trino:8080`)
+4. Configure authentication if needed (Basic Auth, TLS)
+5. Click **Save & test**
+
+## Usage
+
+### Query Editor
+
+Write SQL queries directly in the code editor:
 
 ```sql
-SELECT
-  atimestamp as time,
-  aint as value
-FROM table
-WHERE $__timeFilter(atimestamp) and hostname in($hostname)
-ORDER BY atimestamp ASC
+SELECT date_trunc('hour', created_at) AS time, count(*) AS value
+FROM events
+WHERE created_at > TIMESTAMP '2024-01-01'
+GROUP BY 1
+ORDER BY 1
 ```
 
-### Disabling quoting for multi-value variables
+### Output Formats
 
-Grafana automatically creates a quoted, comma-separated string for multi-value variables.
-For example: if `server01` and `server02` are selected then it will be formatted as:
-`'server01', 'server02'`. To disable quoting, use the `csv` formatting option for variables:
+- **Table**: Returns results as-is in table format
+- **Time Series**: Expects a `time` column and one or more value columns
+- **Logs**: Expects a `time` column and a message column
 
-```
-${servers:csv}
-```
+## Development
 
-Read more about variable formatting options in the [Variables](https://grafana.com/docs/grafana/latest/variables/#advanced-formatting-options) documentation.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for local development setup.
 
-# Contributing
+## Contributing
 
-If you have any idea for an improvement or found a bug do not hesitate to open an issue or submit a pull request.
-We will appreciate any help from the community.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-# Development
+## License
 
-See [DEVELOPMENT.md](https://github.com/trinodb/grafana-trino/blob/main/DEVELOPMENT.md) for development instructions.
-
-# License
-
-Apache 2.0 License, please see [LICENSE](https://github.com/trinodb/grafana-trino/blob/main/LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE) for details.

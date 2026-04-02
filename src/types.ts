@@ -1,64 +1,25 @@
-import { DataQuery, DataSourceJsonData, SelectableValue } from '@grafana/data';
+import { DataSourceJsonData } from '@grafana/data';
+import { DataQuery } from '@grafana/schema';
 
-export enum FormatOptions {
-  TimeSeries,
-  Table,
-  Logs,
-}
+export type FormatOption = 'table' | 'time_series' | 'logs';
+
 export interface TrinoQuery extends DataQuery {
-  rawSQL?: string;
-  format?: FormatOptions;
+  rawSql: string;
+  format: FormatOption;
 }
 
-export const SelectableFormatOptions: Array<SelectableValue<FormatOptions>> = [
-  {
-    label: 'Time Series',
-    value: FormatOptions.TimeSeries,
-  },
-  {
-    label: 'Table',
-    value: FormatOptions.Table,
-  },
-  {
-    label: 'Logs',
-    value: FormatOptions.Logs,
-  },
-];
-
-export const defaultQuery: Partial<TrinoQuery> = {
-  rawSQL: `SELECT
-  $__timeGroup(orderdate, '1w'),
-  sum(totalprice) as value,
-  orderstatus as metric
-FROM
-  tpch.tiny.orders
-WHERE
-  $__timeFilter(orderdate)
-GROUP BY
-  1, 3
-ORDER BY
-  1
-`,
-  format: FormatOptions.TimeSeries,
+export const DEFAULT_QUERY: Partial<TrinoQuery> = {
+  rawSql: '',
+  format: 'table',
 };
 
 /**
- * These are options configured for each DataSource instance.
+ * Options configured for each Trino DataSource instance.
+ * Stored in jsonData (non-sensitive).
  */
+export interface TrinoDataSourceOptions extends DataSourceJsonData {}
 
-export interface TrinoSecureJsonData {
-  accessToken?: string;
-  clientSecret?: string;
-}
-
-export interface TrinoDataSourceOptions extends DataSourceJsonData {
-  enableImpersonation?: boolean;
-  tokenUrl?: string;
-  clientId?: string;
-  impersonationUser?: string;
-  roles?: string;
-  clientTags?: string;
-}
 /**
- * Value that is used in the backend, but never sent over HTTP to the frontend
+ * Secure values sent to the backend only, never exposed to the frontend.
  */
+export interface TrinoSecureJsonData {}

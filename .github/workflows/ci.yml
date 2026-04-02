@@ -3,118 +3,246 @@ name: CI
 on:
   push:
     branches:
+      - master
       - main
   pull_request:
     branches:
+      - master
       - main
 
 jobs:
   build:
+    name: Build, lint and unit tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      plugin-id: ${{ steps.metadata.outputs.plugin-id }}
+      plugin-version: ${{ steps.metadata.outputs.plugin-version }}
+      has-e2e: ${{ steps.check-for-e2e.outputs.has-e2e }}
+      has-backend: ${{ steps.check-for-backend.outputs.has-backend }}
+    env:
+      GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v4.3.0
+      - uses: actions/checkout@v6
         with:
-          node-version: "14.x"
-          cache: 'yarn'
+          persist-credentials: false
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
-      - name: Build and test frontend
-        run: yarn build
+      - name: Check types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test:ci
+      - name: Build frontend
+        run: npm run build
+
+      - name: Check for backend
+        id: check-for-backend
+        run: |
+          if [ -f "Magefile.go" ]
+          then
+            echo "has-backend=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Go environment
-        uses: actions/setup-go@v5
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
 
-      - name: Test backend
-        uses: magefile/mage-action@v3
+      - name: Lint backend
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: latest
-          args: coverage
+          args: ./...
 
       - name: Build backend
-        uses: magefile/mage-action@v3
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: magefile/mage-action@6f50bbb8ea47d56e62dee92392788acbc8192d0b # v3.1.0
         with:
           version: latest
           args: buildAll
 
-      - name: Setup services (Trino, Grafana, PostgreSQL, Keycloak)
+      - name: Test backend
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: magefile/mage-action@6f50bbb8ea47d56e62dee92392788acbc8192d0b # v3.1.0
+        with:
+          version: latest
+          args: test
+
+      - name: Check for E2E
+        id: check-for-e2e
         run: |
-          docker network create trino
+          if [ -f "playwright.config.ts" ]
+          then
+            echo "has-e2e=true" >> $GITHUB_OUTPUT
+          fi
 
-          echo "Starting PostgreSQL..."
-          docker run --rm --detach \
-            --name postgres \
-            --net trino \
-            --env POSTGRES_USER=keycloak \
-            --env POSTGRES_PASSWORD=keycloak \
-            --env POSTGRES_DB=keycloak \
-            postgres:17.4
-          
-          echo "Starting Keycloak..."
-          docker run --rm --detach \
-            --name keycloak \
-            --net trino \
-            --publish 18080:8080 \
-            --env KC_BOOTSTRAP_ADMIN_USERNAME=admin \
-            --env KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-            --env KC_DB=postgres \
-            --env KC_DB_URL_HOST=postgres \
-            --env KC_DB_URL_DATABASE=keycloak \
-            --env KC_DB_USERNAME=keycloak \
-            --env KC_DB_PASSWORD=keycloak \
-            --volume "$(pwd)/test-data/test-keycloak-realm.json:/opt/keycloak/data/import/realm.json" \
-            quay.io/keycloak/keycloak:26.1.4 \
-            start-dev --import-realm
+      - name: Sign plugin
+        run: npm run sign
+        if: ${{ env.GRAFANA_ACCESS_POLICY_TOKEN != '' }}
 
-          echo "Waiting for Keycloak to be ready..."
-          while true; do
-            if curl -s http://localhost:18080/realms/master | grep -q "realm"; then
-              echo "Keycloak is ready!"
-             break
-           fi
-            echo "Waiting for Keycloak..."
-           sleep 5
-          done
-
-          echo "Starting Trino..."
-          docker run --rm --detach \
-            --name trino \
-            --net trino \
-            --volume "$(pwd)/test-data/trino/test-trino-config.properties:/etc/trino/config.properties" \
-            --volume "$(pwd)/test-data/trino/catalog/hive.properties:/etc/trino/catalog/hive.properties" \
-            trinodb/trino:468
-
-          echo "Starting Grafana..."
-          docker run --rm --detach \
-            --name grafana \
-            --net trino \
-            --publish 3000:3000 \
-            --volume "$(pwd):/var/lib/grafana/plugins/trino" \
-            --env "GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=trino-datasource" \
-            grafana/grafana:11.4.0
-          
-          echo "Waiting for Trino to be ready..."
-          while true; do
-            if docker logs trino 2>&1 | grep -q '======== SERVER STARTED ========'; then
-              echo "Trino is ready!"
-              break
-            fi
-            echo "Waiting for Trino..."
-            sleep 5
-          done
-
-          echo "Preconfiguring trino..."
-          docker exec trino trino --user admin --execute "GRANT admin TO USER grafana IN hive;"
-          echo "Done."
-
-      - name: End to end test
+      - name: Get plugin metadata
+        id: metadata
         run: |
-          npx tsc -p tsconfig.json --noEmit
-          npx playwright install
-          npx playwright test
+          sudo apt-get install jq
+
+          export GRAFANA_PLUGIN_ID=$(cat dist/plugin.json | jq -r .id)
+          export GRAFANA_PLUGIN_VERSION=$(cat dist/plugin.json | jq -r .info.version)
+          export GRAFANA_PLUGIN_ARTIFACT=${GRAFANA_PLUGIN_ID}-${GRAFANA_PLUGIN_VERSION}.zip
+
+          echo "plugin-id=${GRAFANA_PLUGIN_ID}" >> $GITHUB_OUTPUT
+          echo "plugin-version=${GRAFANA_PLUGIN_VERSION}" >> $GITHUB_OUTPUT
+          echo "archive=${GRAFANA_PLUGIN_ARTIFACT}" >> $GITHUB_OUTPUT
+
+      - name: Package plugin
+        id: package-plugin
+        run: |
+          mv dist ${PLUGIN_ID}
+          zip ${ARCHIVE} ${PLUGIN_ID} -r
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+          PLUGIN_ID: ${{ steps.metadata.outputs.plugin-id }}
+
+      - name: Check plugin.json
+        run: |
+          docker run --pull=always \
+            -v $PWD/${ARCHIVE}:/archive.zip \
+            grafana/plugin-validator-cli -analyzer=metadatavalid /archive.zip
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+
+      - name: Archive Build
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.metadata.outputs.plugin-id }}-${{ steps.metadata.outputs.plugin-version }}
+          path: ${{ steps.metadata.outputs.plugin-id }}
+          retention-days: 5
+
+  resolve-versions:
+    name: Resolve e2e images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 3
+    needs: build
+    if: ${{ needs.build.outputs.has-e2e == 'true' }}
+    outputs:
+      matrix: ${{ steps.resolve-versions.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Resolve Grafana E2E versions
+        id: resolve-versions
+        uses: grafana/plugin-actions/e2e-version@e2e-version/v1.1.2
+
+  playwright-tests:
+    needs: [resolve-versions, build]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        GRAFANA_IMAGE: ${{fromJson(needs.resolve-versions.outputs.matrix)}}
+    name: e2e test ${{ matrix.GRAFANA_IMAGE.name }}@${{ matrix.GRAFANA_IMAGE.VERSION }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Download plugin
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          name: ${{ needs.build.outputs.plugin-id }}-${{ needs.build.outputs.plugin-version }}
+
+      - name: Execute permissions on binary
+        if: needs.build.outputs.has-backend == 'true'
+        run: |
+          chmod +x ./dist/gpx_*
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Start Grafana
+        run: |
+          docker compose pull
+          ANONYMOUS_AUTH_ENABLED=false DEVELOPMENT=false GRAFANA_VERSION=${{ matrix.GRAFANA_IMAGE.VERSION }} GRAFANA_IMAGE=${{ matrix.GRAFANA_IMAGE.NAME }} docker compose up -d
+
+      - name: Wait for grafana server
+        uses: grafana/plugin-actions/wait-for-grafana@wait-for-grafana/v1.0.2
+        with:
+          url: http://localhost:3000/login
+
+      - name: Install Playwright Browsers
+        run: npm exec playwright install chromium --with-deps
+
+      - name: Run Playwright tests
+        id: run-tests
+        run: npm run e2e
+
+      - name: Upload e2e test summary
+        uses: grafana/plugin-actions/playwright-gh-pages/upload-report-artifacts@upload-report-artifacts/v1.0.1
+        if: ${{ always() && !cancelled() }}
+        with:
+          upload-report: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          test-outcome: ${{ steps.run-tests.outcome }}
+
+      - name: Docker logs
+        if: ${{ always() && steps.run-tests.outcome == 'failure' }}
+        run: |
+          docker logs grafana-trino-datasource >& grafana-server.log
+
+      - name: Stop grafana docker
+        run: docker compose down
+
+      # Uncomment this step to upload the server log to Github artifacts. Remember Github artifacts are public on the Internet if the repository is public.
+      # - name: Upload server log
+      #   uses: actions/upload-artifact@v4
+      #   if: ${{ always() && steps.run-tests.outcome == 'failure' }}
+      #   with:
+      #     name: ${{ matrix.GRAFANA_IMAGE.NAME }}-v${{ matrix.GRAFANA_IMAGE.VERSION }}-${{github.run_id}}-server-log
+      #     path: grafana-server.log
+      #     retention-days: 5
+
+  publish-report:
+    if: ${{ always() && !cancelled() }}
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    needs: [playwright-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # required for playwright-gh-pages
+          persist-credentials: true
+      - name: Publish report
+        uses: grafana/plugin-actions/playwright-gh-pages/deploy-report-pages@deploy-report-pages/v1.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

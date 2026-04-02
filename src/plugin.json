@@ -1,57 +1,38 @@
 {
-  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "datasource",
   "name": "Trino",
   "id": "trino-datasource",
-  "category": "sql",
-  "alerting": true,
-  "annotations": true,
   "metrics": true,
   "logs": true,
   "backend": true,
-  "executable": "gpx_Trino",
+  "alerting": true,
+  "annotations": true,
+  "executable": "gpx_trino",
+  "category": "sql",
   "info": {
-    "description": "The Trino datasource allows to query and visualize Trino data from within Grafana.",
+    "description": "Trino datasource for Grafana",
     "author": {
-      "name": "Trino",
-      "url": "https://trino.io/"
+      "name": "Grafana",
+      "url": "https://github.com/laserninja/grafana-trino"
     },
-    "keywords": [
-      "sql",
-      "trino",
-      "presto",
-      "prestosql",
-      "hive",
-      "hadoop",
-      "query federation",
-      "ansii sql",
-      "big data"
-    ],
+    "keywords": ["datasource", "trino", "sql", "presto"],
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"
     },
     "links": [
       {
-        "name": "Website",
-        "url": "https://github.com/trinodb/grafana-trino"
-      },
-      {
-        "name": "License",
-        "url": "https://github.com/trinodb/grafana-trino/blob/master/LICENSE"
+        "name": "GitHub",
+        "url": "https://github.com/laserninja/grafana-trino"
       }
     ],
-    "screenshots": [
-      {
-        "name": "Explore",
-        "path": "img/explore.png"
-      }
-    ],
+    "screenshots": [],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=8.3.0",
+    "grafanaDependency": ">=10.0.0",
     "plugins": []
   }
 }

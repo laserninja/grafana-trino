@@ -1,62 +1,20 @@
 # Changelog
 
-## 1.0.12
+## 2.0.0 (Unreleased)
 
-* Add support for OAuth2 client-credentials flow
+Complete rewrite using the latest Grafana plugin SDK and tooling.
 
-## 1.0.11
+### Breaking Changes
 
-* Don't overwrite Grafana variables when editing existing dashboard queries
-* Don't cancel queries running for longer than 60 seconds
+- Minimum Grafana version is now 10.0.0
+- Plugin rebuilt from scratch — configuration is compatible but internal implementation has changed
 
-## 1.0.10
+### Added
 
-* Store access token securely
-* Update dependencies
-
-## 1.0.9
-
-* Add support for access token (JWT) authentication
-
-## 1.0.8
-
-* Add support for OAuth
-* Add support for annotations
-* Use UTC timestamps in macroTimeFilter
-
-## 1.0.7
-
-* Add support for user impersonation
-
-## 1.0.6
-
-* Revert focus change actions from last version to fix running queries
-
-## 1.0.5
-
-* Don't execute query with every focus change
-* Fix connection error handling
-
-## 1.0.4
-
-* Add query variable support
-* Enable alerting
-
-## 1.0.3
-
-* Use the custom CA in the custom http client
-* Only check for client certs when TLS options are present
-
-## 1.0.2
-
-### What's Changed
-
-Add support for TLS client auth
-
-## 1.0.1
-
-Updated dependencies.
-
-## 1.0.0
-
-Initial release.
+- Modern backend using `grafana-plugin-sdk-go` v0.291.0 and `sqlds/v4`
+- Configuration UI built with `@grafana/plugin-ui` components
+- SQL query editor with syntax highlighting
+- Output format selection: Table, Time Series, Logs
+- E2E tests with Playwright and `@grafana/plugin-e2e`
+- CI/CD with GitHub Actions (build, lint, test, E2E, release)
+- Docker Compose development environment with Trino
