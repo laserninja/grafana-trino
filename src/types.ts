@@ -17,9 +17,19 @@ export const DEFAULT_QUERY: Partial<TrinoQuery> = {
  * Options configured for each Trino DataSource instance.
  * Stored in jsonData (non-sensitive).
  */
-export interface TrinoDataSourceOptions extends DataSourceJsonData {}
+export interface TrinoDataSourceOptions extends DataSourceJsonData {
+  enableImpersonation?: boolean;
+  tokenUrl?: string;
+  clientId?: string;
+  impersonationUser?: string;
+  roles?: string;
+  clientTags?: string;
+}
 
 /**
  * Secure values sent to the backend only, never exposed to the frontend.
  */
-export interface TrinoSecureJsonData {}
+export interface TrinoSecureJsonData {
+  accessToken?: string;
+  clientSecret?: string;
+}

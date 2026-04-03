@@ -31,8 +31,28 @@ Download the latest release from the [GitHub releases page](https://github.com/l
 1. Go to **Connections → Data sources → Add data source**
 2. Search for **Trino**
 3. Set the **URL** to your Trino coordinator (e.g., `http://trino:8080`)
-4. Configure authentication if needed (Basic Auth, TLS)
+4. Configure authentication if needed (see below)
 5. Click **Save & test**
+
+### Authentication
+
+| Method | Description |
+|--------|-------------|
+| **Basic Auth** | Username/password via Grafana's built-in basic auth settings |
+| **Access Token** | Static JWT token for direct Trino authentication |
+| **OAuth2 Client Credentials** | Automatic token retrieval via client credentials flow (Token URL, Client ID, Client Secret) |
+| **TLS / mTLS** | CA certificate, client certificate, and client key via Grafana's TLS settings |
+| **User Impersonation** | Sets `X-Trino-User` to the current Grafana user's login |
+| **Roles** | Catalog-specific authorization roles (e.g., `system:admin;catalog1:reader`) |
+| **Client Tags** | Comma-separated tags for Trino resource group identification |
+
+### OAuth2 Configuration
+
+For OAuth2 client credentials flow, configure under **OAuth2 Trino Authentication**:
+- **Token URL**: Your identity provider's token endpoint
+- **Client ID**: OAuth2 client identifier
+- **Client secret**: OAuth2 client secret (stored securely)
+- **Impersonation user**: Optional user to impersonate in Trino via OAuth
 
 ## Usage
 
@@ -53,6 +73,25 @@ ORDER BY 1
 - **Table**: Returns results as-is in table format
 - **Time Series**: Expects a `time` column and one or more value columns
 - **Logs**: Expects a `time` column and a message column
+
+### Query Macros
+
+| Macro | Description | Example Output |
+|-------|-------------|----------------|
+| `$__timeFrom()` | Lower time boundary | `TIMESTAMP '2024-01-01 00:00:00'` |
+| `$__timeTo()` | Upper time boundary | `TIMESTAMP '2024-01-02 00:00:00'` |
+| `$__timeFilter(col)` | Time range filter | `col BETWEEN TIMESTAMP '...' AND TIMESTAMP '...'` |
+| `$__dateFilter(col)` | Date range filter | `col BETWEEN date '...' AND date '...'` |
+| `$__timeGroup(col, interval)` | Time bucketing | `FROM_UNIXTIME(FLOOR(TO_UNIXTIME(col)/3600)*3600)` |
+| `$__unixEpochFilter(col)` | Unix epoch range filter | `col BETWEEN 1704067200 AND 1704153600` |
+| `$__unixEpochGroup(col, interval)` | Unix epoch bucketing | `FROM_UNIXTIME(FLOOR(col/300)*300)` |
+| `$__parseTime(col, format)` | Parse time with format | `parse_datetime(col,'yyyy-MM-dd')` |
+
+### Template Variables
+
+Template variables are supported in queries. Values are automatically escaped:
+- **Single-value**: Single quotes are escaped (`value'` → `value''`)
+- **Multi-value**: Comma-separated quoted list (`'val1','val2','val3'`)
 
 ## Development
 
