@@ -24,4 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Configure git for SSH->HTTPS
+        run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
       - uses: grafana/plugin-actions/bundle-size@bundle-size/v1.0.2
